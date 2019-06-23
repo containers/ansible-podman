@@ -5,7 +5,7 @@
   gather_facts: no
   tasks:
     - name: Test
-      pod_image:
+      podman_image_v2:
          name: fedora 
       register: result
 
