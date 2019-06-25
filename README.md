@@ -1,7 +1,7 @@
 
 Ansible Module for Podman
 =========================
-This module will allow to use Podman to manage the images.
+This module allows Ansible to use Podman to manage container images.
 
 Requirements
 ============
@@ -10,7 +10,7 @@ Requirements
 
 Installation
 ============
-1. Install [Podman](https://github.com/containers/libpod)
+1. Install [Podman](https://github.com/containers/libpod/blob/master/install.md)
 2. Install [Python-podman library](https://github.com/containers/python-podman) on the host you will be
    running ansible playbooks.
 ```
