@@ -1,0 +1,11 @@
+---
+#This ansible playbook will pull an image
+
+- hosts: localhost
+  tasks:
+    - name: Test 
+      podman_image_v2:
+         name: alpine 
+      register: result
+
+    - debug: var=result  
