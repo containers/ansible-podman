@@ -1,0 +1,12 @@
+---
+- name: test podman ansible
+  hosts: localhost 
+  user: root
+  gather_facts: no
+  tasks:
+    - name: Test
+      podman_image_v2:
+         name: fedora 
+      register: result
+
+    - debug: var=result
