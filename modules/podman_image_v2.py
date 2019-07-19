@@ -55,7 +55,62 @@ EXAMPLES = """
 
 RETURN = """
 
-"image": "289289d1a15b92ace1a822f9920f5c1477691aa01ca567a8502eb7eb67eb4a80"
+"image": {
+            "annotations": {},
+            "architecture": "amd64",
+            "author": "",
+            "comment": "",
+            "config": {
+                "cmd": [
+                    "/bin/sh"
+                ],
+                "env": [
+                    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+                ]
+            },
+            "created": "2019-07-11T22:20:52.375286404Z",
+            "digest": "sha256:57334c50959f26ce1ee025d08f136c2292c128f84e7b229d1b0da5dac89e9866",
+            "graphdriver": {
+                "data": {
+                    "mergeddir": "/var/lib/containers/storage/overlay/1bfeebd65323b8ddf5bd6a51cc7097b72788bc982e9ab3280d53d3c613adffa7/merged",
+                    "upperdir": "/var/lib/containers/storage/overlay/1bfeebd65323b8ddf5bd6a51cc7097b72788bc982e9ab3280d53d3c613adffa7/diff",
+                    "workdir": "/var/lib/containers/storage/overlay/1bfeebd65323b8ddf5bd6a51cc7097b72788bc982e9ab3280d53d3c613adffa7/work"
+                },
+                "name": "overlay"
+            },
+            "history": [
+                {
+                    "created": "2019-07-11T22:20:52.139709355Z",
+                    "created_by": "/bin/sh -c #(nop) ADD file:0eb5ea35741d23fe39cbac245b3a5d84856ed6384f4ff07d496369ee6d960bad in / "
+                },
+                {
+                    "created": "2019-07-11T22:20:52.375286404Z",
+                    "created_by": "/bin/sh -c #(nop)  CMD [\"/bin/sh\"]",
+                    "empty_layer": true
+                }
+            ],
+            "id": "b7b28af77ffec6054d13378df4fdf02725830086c7444d9c278af25312aa39b9",
+            "labels": null,
+            "manifesttype": "application/vnd.docker.distribution.manifest.v2+json",
+            "os": "linux",
+            "parent": "",
+            "repodigests": [
+                "docker.io/library/alpine@sha256:57334c50959f26ce1ee025d08f136c2292c128f84e7b229d1b0da5dac89e9866"
+            ],
+            "repotags": [
+                "docker.io/library/alpine:latest"
+            ],
+            "rootfs": {
+                "layers": [
+                    "sha256:1bfeebd65323b8ddf5bd6a51cc7097b72788bc982e9ab3280d53d3c613adffa7"
+                ],
+                "type": "layers"
+            },
+            "size": 5846536,
+            "user": "",
+            "version": "18.06.1-ce",
+            "virtualsize": 5846536
+        }
 
 """
 
@@ -102,8 +157,33 @@ class PodmanImageManager(object):
     def pull_image(self, image_name=None):
         if image_name is None:
             image_name = self.image_name
+        id=self._client.images.pull(image_name)
+        img=self._client.images.get(id)
+        res=img.inspect()
+        return res._asdict()
+    
+    def absent(self):
+        image = self.find_image()
 
-        return self._client.images.pull(image_name)
+        if image:
+            self.results['actions'].append('Removed image {name}'.format(name=self.name))
+            self.results['changed'] = True
+            self.results['image']['state'] = 'Deleted'
+            if not self.module.check_mode:
+                self.remove_image()
+
+    def remove_image(self, image_name=None):
+        if image_name is None:
+            image_name = self.image_name
+
+        img = client.images.get(image_name)
+        if self.force:
+            _id=img.remove(self.force)
+        else:
+            _id=img.remove()
+        
+        return _id
+
 
 def parse_repository_tag(repo_name):
     parts = repo_name.rsplit('@', 1)
