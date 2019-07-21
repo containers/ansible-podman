@@ -1,0 +1,12 @@
+---
+#This ansible playbook will remove an image
+
+- hosts: localhost
+  tasks:
+    - name: Test Remove image 
+      podman_image_v2:
+         name: alpine
+         state: absent 
+      register: result
+
+    - debug: var=result  
