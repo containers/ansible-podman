@@ -1,5 +1,131 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
+
+ANSIBLE_METADATA = {'metadata_version': '1.1',
+                    'status': ['preview'],
+                    'supported_by': 'community'}
+
+DOCUMENTATION = """
+  module: podman_image_v2
+  author:
+      - Dhanisha Phadate (@Phadated) 
+      - Renu Hadke (@renuHadke)
+      - Neha Jain (@nehajain1809)
+      - Krish Jain (@krishjain4894)
+      - Chinmay Keskar (@ckeskar)
+  short_description: Pull and remove images for use by podman
+  notes: []
+  description:
+      - pull, remove images using Podman.
+  options:
+    name:
+      description:
+        - Name of the image to pull or delete. It may contain a tag using the format C(image:tag).
+      required: True
+    tag:
+      description:
+        - Tag of the image to pull or delete.
+      default: "latest"
+    pull:
+      description: Whether or not to pull the image.
+      default: True
+    force:
+      description:
+        - Whether or not to force pull an image. force the pull even if the image already exists.
+    state:
+      description:
+        - Whether an image should be present or absent.
+      default: "present"
+      choices:
+        - present
+        - absent
+ """
+
+EXAMPLES = """
+   - name: Pull an image
+     podman_image_v2:
+       name: fedora
+     register: result
+  
+   - debug: var=result
+
+    - name: Remove an image 
+      podman_image_v2:
+         name: alpine
+         state: absent 
+      register: result
+
+    - debug: var=result  
+
+    - name: Pull an image with specific tag
+     podman_image_v2:
+        name: alpine
+        tag: "3.10.1"
+"""
+
+RETURN = """
+
+"image": {
+            "annotations": {},
+            "architecture": "amd64",
+            "author": "",
+            "comment": "",
+            "config": {
+                "cmd": [
+                    "/bin/sh"
+                ],
+                "env": [
+                    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+                ]
+            },
+            "created": "2019-07-11T22:20:52.375286404Z",
+            "digest": "sha256:57334c50959f26ce1ee025d08f136c2292c128f84e7b229d1b0da5dac89e9866",
+            "graphdriver": {
+                "data": {
+                    "mergeddir": "/var/lib/containers/storage/overlay/1bfeebd65323b8ddf5bd6a51cc7097b72788bc982e9ab3280d53d3c613adffa7/merged",
+                    "upperdir": "/var/lib/containers/storage/overlay/1bfeebd65323b8ddf5bd6a51cc7097b72788bc982e9ab3280d53d3c613adffa7/diff",
+                    "workdir": "/var/lib/containers/storage/overlay/1bfeebd65323b8ddf5bd6a51cc7097b72788bc982e9ab3280d53d3c613adffa7/work"
+                },
+                "name": "overlay"
+            },
+            "history": [
+                {
+                    "created": "2019-07-11T22:20:52.139709355Z",
+                    "created_by": "/bin/sh -c #(nop) ADD file:0eb5ea35741d23fe39cbac245b3a5d84856ed6384f4ff07d496369ee6d960bad in / "
+                },
+                {
+                    "created": "2019-07-11T22:20:52.375286404Z",
+                    "created_by": "/bin/sh -c #(nop)  CMD [\"/bin/sh\"]",
+                    "empty_layer": true
+                }
+            ],
+            "id": "b7b28af77ffec6054d13378df4fdf02725830086c7444d9c278af25312aa39b9",
+            "labels": null,
+            "manifesttype": "application/vnd.docker.distribution.manifest.v2+json",
+            "os": "linux",
+            "parent": "",
+            "repodigests": [
+                "docker.io/library/alpine@sha256:57334c50959f26ce1ee025d08f136c2292c128f84e7b229d1b0da5dac89e9866"
+            ],
+            "repotags": [
+                "docker.io/library/alpine:latest"
+            ],
+            "rootfs": {
+                "layers": [
+                    "sha256:1bfeebd65323b8ddf5bd6a51cc7097b72788bc982e9ab3280d53d3c613adffa7"
+                ],
+                "type": "layers"
+            },
+            "size": 5846536,
+            "user": "",
+            "version": "18.06.1-ce",
+            "virtualsize": 5846536
+        }
+
+"""
 
 import os
 import json
@@ -34,13 +160,12 @@ class PodmanImageManager(object):
             self.absent()
 
     def present(self):
-        if self.force:
+        if not self.force:
             # Pull the image
             self.results['actions'].append('Pulled image {image_name}'.format(image_name=self.image_name))
             self.results['changed'] = True
             if not self.module.check_mode:
                 self.results['image'] = self.pull_image()
-                # self.results = self.pull_image()
 
     def find_image(self, image_name=None):
         pass
