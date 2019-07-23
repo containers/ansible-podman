@@ -3,7 +3,7 @@
 
 - hosts: localhost
   tasks:
-    - name: Test Remove image 
+    - name: Remove image 
       podman_image_v2:
          name: alpine
          state: absent 
