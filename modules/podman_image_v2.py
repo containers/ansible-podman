@@ -15,23 +15,25 @@ DOCUMENTATION = """
       - Renu Hadke (@renuHadke)
       - Neha Jain (@nehajain1809)
       - Krish Jain (@krishjain4894)
-      - Chinmay Keskar (@ckeskar)
-  short_description: Pull and remove images for use by podman
+  short_description: Pull, Push and remove images for use by podman
   notes: []
   description:
-      - pull, remove images using Podman.
+      - pull, Push, remove images using Podman.
   options:
     name:
       description:
-        - Name of the image to pull or delete. It may contain a tag using the format C(image:tag).
+        - Name of the image to pull, push or delete. It may contain a tag using the format C(image:tag).
       required: True
     tag:
       description:
-        - Tag of the image to pull or delete.
+        - Tag of the image to pull, push or delete.
       default: "latest"
     pull:
       description: Whether or not to pull the image.
       default: True
+    push:
+      description: Whether or not to push an image.
+      default: False
     force:
       description:
         - Whether or not to force pull an image. force the pull even if the image already exists.
@@ -42,28 +44,51 @@ DOCUMENTATION = """
       choices:
         - present
         - absent
+        - build
+    push_args:
+      description: Arguments that control pushing images.
+      suboptions:
+        dest:
+          description: Path or URL where image will be pushed.
+        transport:
+          description:
+            - Transport to use when pushing in image. If no transport is set, will attempt to push to a remote registry.
+          choices:
+            - dir
+            - docker-archive
+            - docker-daemon
+            - oci-archive
+            - ostree
  """
 
 EXAMPLES = """
    - name: Pull an image
      podman_image_v2:
        name: fedora
-     register: result
-  
-   - debug: var=result
 
     - name: Remove an image 
       podman_image_v2:
          name: alpine
          state: absent 
-      register: result
-
-    - debug: var=result  
 
     - name: Pull an image with specific tag
      podman_image_v2:
         name: alpine
         tag: "3.10.1"
+
+    - name: push an image
+        podman_image_v2:
+            name: alpine
+            push: yes
+            push_args:
+            dest: docker.io/dhanisha
+    
+    - name: push an image to 
+        podman_image_v2:
+            name: alpine
+            push: yes
+            push_args:
+            dest: docker.io/dhanisha
 """
 
 RETURN = """
@@ -142,8 +167,10 @@ class PodmanImageManager(object):
         self.name = self.module.params.get('name')
         self.tag = self.module.params.get('tag')
         self.pull = self.module.params.get('pull')
+        self.push = self.module.params.get('push')
         self.force = self.module.params.get('force')
         self.state = self.module.params.get('state')
+        self.push_args = self.module.params.get('push_args')
         self._client= podman.Client()
 
         repo, repo_tag = parse_repository_tag(self.name)
@@ -160,12 +187,30 @@ class PodmanImageManager(object):
             self.absent()
 
     def present(self):
+
         if not self.force:
             # Pull the image
             self.results['actions'].append('Pulled image {image_name}'.format(image_name=self.image_name))
             self.results['changed'] = True
             if not self.module.check_mode:
                 self.results['image'] = self.pull_image()
+        
+        if self.push:
+            # Push the image
+            if '/' in self.image_name:
+                push_format_string = 'Pushed image {image_name}'
+            else:
+                push_format_string = 'Pushed image {image_name} to {dest}'
+
+            if not self.module.check_mode:
+                self.results['actions'].append(push_format_string.format(image_name=self.image_name, dest=self.push_args['dest']))
+                self.results['changed'] = True
+                self.results['image']= self.push_image()
+
+    #TODO implement this function once https://github.com/containers/python-podman/issues/51 resolved
+    def build_image(self):
+        pass
+                
 
     def find_image(self, image_name=None):
         pass
@@ -177,6 +222,59 @@ class PodmanImageManager(object):
         img=self._client.images.get(id)
         res=img.inspect()
         return res._asdict()
+
+    #FIXME The result will return error until https://github.com/containers/python-podman/issues/52 is resolved
+    #TODO Implement the push args
+    def push_image(self, image_name=None):
+
+        # Build the destination argument
+        #  dest - docker.io/dhanisha {image_name} : self.name
+        if image_name is None:
+            image_name = self.image_name
+        dest = self.push_args.get('dest')
+        dest_format_string = '{dest}/{image_name}'
+        regexp = re.compile(r'/{name}(:{tag})?'.format(name=self.name, tag=self.tag))
+        if not dest:
+            if '/' not in self.name:
+                self.module.fail_json(msg="'push_args['dest']' is required when pushing images that do not have the remote registry in the image name")
+
+        # If the push destinaton contains the image name and/or the tag
+        # remove it and warn since it's not needed.
+        elif regexp.search(dest):
+            dest = regexp.sub('', dest)
+            self.module.warn("Image name and tag are automatically added to push_args['dest']. Destination changed to {dest}".format(dest=dest))
+
+        if dest and dest.endswith('/'):
+            dest = dest[:-1]
+
+        transport = self.push_args.get('transport')
+
+        if transport:
+            if not dest:
+                self.module.fail_json("'push_args['transport'] requires 'push_args['dest'] but it was not provided.")
+            if transport == 'docker':
+                dest_format_string = '{transport}://{dest}'
+            elif transport == 'ostree':
+                dest_format_string = '{transport}:{name}@{dest}'
+            else:
+                dest_format_string = '{transport}:{dest}'
+
+        dest_string = dest_format_string.format(transport=transport, name=self.name, dest=dest, image_name=self.image_name,)
+
+        # Only append the destination argument if the image name is not a URL
+        if '/' not in self.name:
+            try:
+                img = self._client.images.get(image_name)
+                result= img.push(dest_string)
+            except KeyError as err:
+                result= "Failed to push image {image_name}: KeyError {err}".format(image_name=self.image_name, err=err)
+                self.module.fail_json(msg="Failed to push image {image_name}: KeyError {err}".format(image_name=self.image_name, err=err))
+        else:
+            #result= "Failed to push image {image_name}:Image name is an url".format(image_name=self.image_name)
+            self.module.fail_json(msg="Failed to push image {image_name}:Image name is an url".format(image_name=self.image_name))
+
+        return result
+
 
     def absent(self):
         image = self.image_name
@@ -225,9 +323,29 @@ def main():
             name=dict(type='str', required=True),
             tag=dict(type='str', default='latest'),
             pull=dict(type='bool', default=True),
+            push=dict(type='bool', default=False),
             force=dict(type='bool', default=False),
             state=dict(type='str', default='present', choices=['absent', 'present', 'build']),
-        ),
+            username=dict(type='str'),
+            password=dict(type='str', no_log=True),
+            push_args=dict(
+                type='dict',
+                default={},
+                options=dict(
+                    dest=dict(type='str', aliases=['destination'],),
+                    transport=dict(
+                        type='str',
+                        choices=[
+                            'dir',
+                            'docker-archive',
+                            'docker-daemon',
+                            'oci-archive',
+                            'ostree',
+                        ]
+                    ),
+                ),
+            ),
+        )
     )
 
     results = dict(
